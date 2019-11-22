@@ -200,6 +200,14 @@ fn bench_3bit(c: &mut Criterion) {
 fn hash_vec_u8(c: &mut Criterion) {
     let mut group = c.benchmark_group("Hashing Vec<u8>");
 
+    // Even if slower could be faster due to faster RC
+    group.bench_function("3bit", |b| b.iter(|| {
+        let kmers = KMERS.clone();
+        let mut hashes = Vec::with_capacity(KMERS.len());
+        for kmer in kmers {
+            hashes.push(convert_kmer_to_bits(21, &kmer));
+        }}));
+
     group.bench_function("t1ha0", |b| b.iter(|| {
         let kmers = KMERS.clone();
         let mut hashes = Vec::with_capacity(KMERS.len());
