@@ -1,0 +1,22 @@
+[package]
+name = "kmer-hasher"
+version = "0.1.0"
+authors = ["Joseph Guhlin <joseph.guhlin@gmail.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+criterion = "0.3.0"
+seahash = "3.0.6"
+wyhash = "0.3.0"
+rand = "0.7.2"
+lazy_static = "1.4.0"
+twox-hash = "1.5.0"
+fnv = "1.0.6"
+t1ha = "0.1"
+bitvec = "0.15.2"
+
+[[bench]]
+name = "hashing"
+harness = false
