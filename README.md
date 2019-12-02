@@ -1,5 +1,8 @@
 Best is now 3bit2_foreach loop. Slower than some other hashers, but less collision, and added benefit of faster rc computation, and possibly SIMD
 
+
+In practice, 3bit2_foreach is significantly faster than the other hashers, likely due to less collision to deal with.
+
 ```
 Running target/release/deps/hashing-c1433054d17cf6e2
 Hashing Vec<u8>/3bit2fe time:   [6.0534 ms 6.0608 ms 6.0697 ms]
