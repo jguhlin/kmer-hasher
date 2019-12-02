@@ -7,6 +7,8 @@ extern crate bitvec;
 
 use twox_hash::XxHash64;
 
+use std::arch::x86_64;
+
 use rand::Rng;
 use wyhash::wyhash;
 use seahash::SeaHasher;
