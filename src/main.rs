@@ -23,7 +23,37 @@ extern crate lazy_static;
 
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
+/* A => 111
+ * T => 000
+ * C => 101
+ * G => 010
+ * N => 001
+ * N => 100 // Need RC of N, which is N
+*/
+
+// A is 7
+// T is 0
+// C is 5
+// G is 2
+// N is thus: 1
+// N is also: 4
+
 lazy_static! {
+
+    static ref CONVERSION: [u8; 256] = {
+
+        let mut conversion: [u8; 256] = [1; 256];
+        conversion[65]  = 7;
+        conversion[97]  = 7;
+        conversion[84]  = 0;
+        conversion[116] = 0;
+        conversion[67]  = 5;
+        conversion[99]  = 5;
+        conversion[71]  = 2;
+        conversion[103] = 2;
+
+        conversion
+    };
 
     static ref KMERS: Vec<Vec<u8>> = {
 
@@ -98,3 +128,10 @@ fn main() {
     let kmery = !kmerx;
     println!("{:0>64b}", kmery.as_slice()[0] as u64);
 }
+
+/*
+What it needs to be
+
+add +1, +2, +3, +4 +5 then SHIFT over 3 bits... then add the next nucleotide
+Should be fastest...
+*/

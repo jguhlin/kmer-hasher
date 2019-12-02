@@ -25,6 +25,21 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 lazy_static! {
 
+    static ref CONVERSION: [u64; 256] = {
+
+        let mut conversion: [u64; 256] = [1; 256];
+        conversion[65]  = 7;
+        conversion[97]  = 7;
+        conversion[84]  = 0;
+        conversion[116] = 0;
+        conversion[67]  = 5;
+        conversion[99]  = 5;
+        conversion[71]  = 2;
+        conversion[103] = 2;
+
+        conversion
+    };
+
     static ref KMERS: Vec<Vec<u8>> = {
 
         let mut rng = rand::thread_rng();
@@ -188,25 +203,61 @@ fn bench_t1ha0_bv(c: &mut Criterion) {
     }));
 }
 
-fn bench_3bit(c: &mut Criterion) {
+/* fn bench_3bit(c: &mut Criterion) {
     let mut hashes = Vec::with_capacity(KMERS.len());
     c.bench_function("3bit hashing", |b| b.iter(|| {
         for kmer in KMERS.clone().iter() {
             hashes.push(convert_kmer_to_bits(21, &kmer));
         }
     }));
-}
+} */
 
 fn hash_vec_u8(c: &mut Criterion) {
     let mut group = c.benchmark_group("Hashing Vec<u8>");
 
+/*     group.bench_function("3bit3", |b| b.iter(|| {
+        let kmers = KMERS.clone();
+        let mut hashes = Vec::with_capacity(KMERS.len());
+        for kmer in kmers {
+            hashes.push(convert_kmer_to_bits3(&kmer));
+        }})); */
+
+    group.bench_function("3bit2fe", |b| b.iter(|| {
+        let kmers = KMERS.clone();
+        let mut hashes = Vec::with_capacity(KMERS.len());
+        for kmer in kmers {
+            hashes.push(convert_kmer_to_bits2_foreach(&kmer));
+        }}));
+
+    group.bench_function("3bit2", |b| b.iter(|| {
+        let kmers = KMERS.clone();
+        let mut hashes = Vec::with_capacity(KMERS.len());
+        for kmer in kmers {
+            hashes.push(convert_kmer_to_bits2(&kmer));
+        }}));
+    
+    group.bench_function("3bit2_1", |b| b.iter(|| {
+        let kmers = KMERS.clone();
+        let mut hashes = Vec::with_capacity(KMERS.len());
+        for kmer in kmers {
+            hashes.push(convert_kmer_to_bits2_1(&kmer));
+        }}));
+
+    group.bench_function("3bit2_2", |b| b.iter(|| {
+        let kmers = KMERS.clone();
+        let mut hashes = Vec::with_capacity(KMERS.len());
+        for kmer in kmers {
+            hashes.push(convert_kmer_to_bits2_2(&kmer));
+    }}));
+
     // Even if slower could be faster due to faster RC
-    group.bench_function("3bit", |b| b.iter(|| {
+    // 23.1ms vs 6.3ms in 3bit2
+    /* group.bench_function("3bit", |b| b.iter(|| {
         let kmers = KMERS.clone();
         let mut hashes = Vec::with_capacity(KMERS.len());
         for kmer in kmers {
             hashes.push(convert_kmer_to_bits(21, &kmer));
-        }}));
+        }})); */
 
     group.bench_function("t1ha0", |b| b.iter(|| {
         let kmers = KMERS.clone();
@@ -321,7 +372,7 @@ fn hash_vec_bv(c: &mut Criterion) {
 
 fn custom_criterion() -> Criterion {
     Criterion::default()
-        .measurement_time(Duration::from_secs(75))
+        .measurement_time(Duration::from_secs(60))
         .sample_size(100)
 }
 
@@ -349,14 +400,14 @@ criterion_group! {
     targets = bench_wyhash_bv, bench_seahash_bv, bench_xxhash_bv, bench_fnvhash_bv, bench_t1ha0_bv
 } */
 
-criterion_main!(hashing_benches, hashing_benches_bv);
-// criterion_main!(hashing_benches_bv);
+// criterion_main!(hashing_benches, hashing_benches_bv);
+criterion_main!(hashing_benches);
 
+// RETIRED
+/*
 fn convert_kmer_to_bits(k: usize, kmer: &[u8]) -> u64 {
     let mut bits: u64 = 0;
-    
-    assert!(k <= 21);
-    
+ 
     let iter = kmer.iter().rev().enumerate();
     
     for (n, base) in iter {
@@ -364,7 +415,64 @@ fn convert_kmer_to_bits(k: usize, kmer: &[u8]) -> u64 {
     }
 
     bits
+} */
+
+#[inline(always)]
+fn convert_kmer_to_bits2(kmer: &[u8]) -> u64 {
+    let mut bits: u64 = 0;
+    bits = bits.wrapping_add(CONVERSION[usize::from(kmer[0])]);
+    for base in &kmer[1..] {
+        bits <<= 3;
+        bits = bits.wrapping_add(CONVERSION[usize::from(*base)]);
+    }
+    bits
 }
+
+#[inline(always)]
+fn convert_kmer_to_bits2_foreach(kmer: &[u8]) -> u64 {
+    let mut bits: u64 = 0;
+    bits = bits.wrapping_add(CONVERSION[usize::from(kmer[0])]);
+    &kmer[1..].iter().for_each(|base| {
+        bits <<= 3;
+        bits = bits.wrapping_add(CONVERSION[usize::from(*base)]);
+    });
+    bits
+}
+
+
+// Previous version, replaced because .wrapping_add is faster
+// Here for legacy reasons...
+fn convert_kmer_to_bits2_1(kmer: &[u8]) -> u64 {
+    let mut bits: u64 = 0;
+    bits += CONVERSION[usize::from(kmer[0])];
+    for base in &kmer[1..] {
+        bits <<= 3;
+        bits += CONVERSION[usize::from(*base)];
+    }
+    bits
+}
+
+fn convert_kmer_to_bits2_2(kmer: &[u8]) -> u64 {
+    let mut bits: u64 = 0;
+    bits = bits.saturating_add(CONVERSION[usize::from(kmer[0])]);
+    for base in &kmer[1..] {
+        bits <<= 3;
+        bits = bits.saturating_add(CONVERSION[usize::from(*base)]);
+    }
+    bits
+}
+
+// Not faster at this time...
+fn convert_kmer_to_bits3(kmer: &[u8]) -> u64 {
+    let mut to_add: [u64; 21] = [0; 21];
+
+    for (n, base) in kmer.iter().enumerate() {
+        to_add[n] = CONVERSION[*base as usize] << n * 3;
+    }
+
+    to_add.iter().sum()
+}
+
 
 /* A => 111
  * T => 000
