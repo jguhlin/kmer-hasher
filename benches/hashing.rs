@@ -18,6 +18,8 @@ use bitvec::prelude::*;
 
 use std::ops::BitXor;
 
+use std::mem;
+
 #[macro_use]
 extern crate lazy_static;
 
@@ -39,6 +41,22 @@ lazy_static! {
 
         conversion
     };
+
+    static ref CONVERSION_I: [i64; 256] = {
+
+        let mut conversion: [i64; 256] = [1; 256];
+        conversion[65]  = 7;
+        conversion[97]  = 7;
+        conversion[84]  = 0;
+        conversion[116] = 0;
+        conversion[67]  = 5;
+        conversion[99]  = 5;
+        conversion[71]  = 2;
+        conversion[103] = 2;
+
+        conversion
+    };
+
 
     static ref KMERS: Vec<Vec<u8>> = {
 
@@ -222,6 +240,41 @@ fn hash_vec_u8(c: &mut Criterion) {
             hashes.push(convert_kmer_to_bits3(&kmer));
         }})); */
 
+    // So much slower!
+    /* group.bench_function("3bit2_hash4_conversionfn", |b| b.iter(|| {
+        let kmers = KMERS.clone();
+        let mut hashes = Vec::with_capacity(KMERS.len());
+        let chunks = kmers.chunks_exact(4);
+
+        for kmer in chunks.remainder() {
+            hashes.push(convert_kmer_to_bits2_foreach(&kmer));
+        }
+
+        for chunk in chunks {
+            let i: (u64, u64, u64, u64) = hash4_conversionfn(&chunk[0], &chunk[1], &chunk[2], &chunk[3]);
+            hashes.push(i.0);
+            hashes.push(i.1);
+            hashes.push(i.2);
+            hashes.push(i.3);
+        }}));     */
+
+    group.bench_function("3bit2_hash4", |b| b.iter(|| {
+        let kmers = KMERS.clone();
+        let mut hashes = Vec::with_capacity(KMERS.len());
+        let chunks = kmers.chunks_exact(4);
+
+        for kmer in chunks.remainder() {
+            hashes.push(convert_kmer_to_bits2_foreach(&kmer));
+        }
+
+        for chunk in chunks {
+            let i: (u64, u64, u64, u64) = hash4(&chunk[0], &chunk[1], &chunk[2], &chunk[3]);
+            hashes.push(i.0);
+            hashes.push(i.1);
+            hashes.push(i.2);
+            hashes.push(i.3);
+        }}));
+
     group.bench_function("3bit2fe", |b| b.iter(|| {
         let kmers = KMERS.clone();
         let mut hashes = Vec::with_capacity(KMERS.len());
@@ -327,20 +380,6 @@ fn hash_vec_bv(c: &mut Criterion) {
             let mut hasher = XxHash64::with_seed(0xae05_4331_1b70_2d91);
             hasher.write(kmer.as_slice());
             hashes.push(hasher.finish());
-        }}));
-
-    group.bench_function("seahash", |b| b.iter(|| {
-        let kmers = KMERS_BV.clone();
-        let mut hashes = Vec::with_capacity(KMERS_BV.len());
-        for kmer in kmers {
-            hashes.push(seahash::hash_seeded(kmer.as_slice(), 42_988_123, 1_328_433, 193_235_245, 184_124));
-        }}));
-
-    group.bench_function("wyhash", |b| b.iter(|| {
-        let kmers = KMERS_BV.clone();
-        let mut hashes = Vec::with_capacity(KMERS_BV.len());
-        for kmer in kmers {
-            hashes.push(wyhash(kmer.as_slice(), 43_988_123));
         }}));
 
     group.bench_function("custom add", |b| b.iter(|| {
@@ -493,3 +532,81 @@ fn change_bits(char: u8, n: usize, bits: &mut u64) -> u64 {
     }
     *bits
 }
+
+#[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::*;
+#[cfg(target_arch = "x86")]
+use std::arch::x86::*;
+
+// AVX can calc 4 at a time
+fn hash4(k1: &[u8], k2: &[u8], k3: &[u8], k4: &[u8]) -> (u64, u64, u64, u64) {
+    unsafe {
+        let mut hashes = _mm256_setzero_si256();
+        let shift = _mm_set1_epi64x(3);
+
+        let mut add = _mm256_set_epi64x(CONVERSION_I[usize::from(k1[0])],
+                                        CONVERSION_I[usize::from(k2[0])],
+                                        CONVERSION_I[usize::from(k3[0])],
+                                        CONVERSION_I[usize::from(k4[0])]);
+        
+        hashes = _mm256_add_epi64(hashes, add);
+
+        for i in 1..k1.len() {
+            hashes = _mm256_sll_epi64(hashes, shift);
+            add = _mm256_set_epi64x(CONVERSION_I[usize::from(k1[i])],
+                                    CONVERSION_I[usize::from(k2[i])],
+                                    CONVERSION_I[usize::from(k3[i])],
+                                    CONVERSION_I[usize::from(k4[i])]);
+            hashes = _mm256_add_epi64(hashes, add);
+        }
+
+        mem::transmute(hashes)
+    }
+}
+
+// A is 7
+// T is 0
+// C is 5
+// G is 2
+// N is thus: 1
+// N is also: 4... I mean 3
+
+/*
+fn conversion_i(n: &u8) -> i64 {
+    match *n {
+        b'A' => 7,
+        b'a' => 7,
+        b'T' => 0,
+        b't' => 0,
+        b'C' => 5,
+        b'c' => 5,
+        b'G' => 2,
+        b'g' => 2,
+        _    => 1
+    }
+}
+
+fn hash4_conversionfn(k1: &[u8], k2: &[u8], k3: &[u8], k4: &[u8]) -> (u64, u64, u64, u64) {
+    unsafe {
+        let mut hashes = _mm256_setzero_si256();
+        let shift = _mm_set1_epi64x(3);
+
+        let mut add = _mm256_set_epi64x(conversion_i(&k1[0]),
+                                        conversion_i(&k2[0]),
+                                        conversion_i(&k3[0]),
+                                        conversion_i(&k4[0]),);
+        
+        hashes = _mm256_add_epi64(hashes, add);
+
+        for i in 1..k1.len() {
+            hashes = _mm256_sll_epi64(hashes, shift);
+            add = _mm256_set_epi64x(conversion_i(&k1[i]),
+                                    conversion_i(&k2[i]),
+                                    conversion_i(&k3[i]),
+                                    conversion_i(&k4[i]));
+            hashes = _mm256_add_epi64(hashes, add);
+        }
+
+        mem::transmute(hashes)
+    }
+}*/
