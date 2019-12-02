@@ -1,6 +1,6 @@
 Best is now 3bit2_foreach loop. Slower than some other hashers, but less collision, and added benefit of faster rc computation, and possibly SIMD
 
-```shell
+```
 Running target/release/deps/hashing-c1433054d17cf6e2
 Hashing Vec<u8>/3bit2fe time:   [6.0534 ms 6.0608 ms 6.0697 ms]
                         change: [-2.4957% -1.8814% -1.2931%] (p = 0.00 < 0.05)
